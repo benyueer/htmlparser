@@ -13,9 +13,11 @@ const startTagClose = /^\s*(\/?)>/
 // 匹配结束标签
 const endTag = new RegExp(`^<\\/${tagNameCapture}[^>]*>`)
 
-
 // 匹配属性
 const attrReg = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/
+
+// 匹配插值表达式
+const expReg = /\{\{((?:.|\r?\n)+?)\}\}/g
 
 
 function parserHTML(template) {
@@ -143,9 +145,23 @@ function parserHTML(template) {
   function parseText(text) {
     // 去除空格
     text = text.trim()
-    text && curParent.children.push({
+    if (!text) return
+
+    let matched, tokens = [], beginIndex = 0
+    while (matched = expReg.exec(text)) {
+
+      if (matched.index > beginIndex) {
+        tokens.push(JSON.stringify(text.slice(beginIndex, matched.index)))
+      }
+      const exp = matched[1].trim()
+      tokens.push(`_s(${exp})`)
+      beginIndex = matched.index + matched[0].length
+    }
+
+
+    curParent.children.push({
       type: 'text',
-      text,
+      text: tokens.join('+'),
       parent: curParent
     })
   }
@@ -170,22 +186,26 @@ function parserHTML(template) {
       }
     } else {
       // 文本
-      const text = template.substring(0, textEndIndex)
-      console.log(1, text)
-      if (text) {
-        advance(textEndIndex)
+      let textLen = textEndIndex > 0 ? textEndIndex : template.length
+      const text = template.substring(0, textLen)
+      // if (text) {
+        advance(textLen)
         parseText(text)
-      }
+      // }
     }
   }
 
   return root
 }
 
-const ast = parserHTML(`<div class="log-content">
-<div class="log-box">
-  <pre v-highlight="logStr"  ref="code"><code class="language-bash">
-  </code></pre>
+const ast = parserHTML(`
+<div class="log-content">
+  <p v-if="showTitle">this is {{ text }} of {{has}}</p>
+  <span v-for="item in list" :key="item.id">{{item.text}}</span>
+  <div class="log-box">
+    <pre v-highlight="logStr"  ref="code"><code class="language-bash">
+    </code></pre>
+  </div>
 </div>
-</div>`)
-console.log(ast)
+`)
+console.log(ast.children[0].children)
